@@ -1,0 +1,16 @@
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+.DS_Store
+
+# Build output
+*.apk
+*.aab
+!demo/*.apk
+!WexrespriseStore.apk

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="wx_bg">#FF0B0D12</color>
+    <color name="wx_surface">#FF141820</color>
+    <color name="wx_primary">#FFA8C7FA</color>
+    <color name="wx_on_primary">#FF0A1B33</color>
+    <color name="wx_text">#FFE7EAF0</color>
+    <color name="wx_sub">#FF9BA5B4</color>
+    <color name="wx_outline">#33FFFFFF</color>
+</resources>
