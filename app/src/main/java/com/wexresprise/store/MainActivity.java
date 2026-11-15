@@ -468,11 +468,11 @@ public class MainActivity extends Activity {
         demoBanner.setVisibility(demo ? View.VISIBLE : View.GONE);
 
         boolean loaded = !loading && error == null;
+        List<StoreItem> visible = filtered();
         subtitleView.setText(loaded
-                ? getString(R.string.count_label, items.size())
+                ? getString(R.string.count_label, visible.size())
                 : getString(R.string.subtitle));
 
-        List<StoreItem> visible = filtered();
         boolean hasItems = loaded && !visible.isEmpty();
         list.setVisibility(hasItems ? View.VISIBLE : View.INVISIBLE);
 
@@ -612,7 +612,7 @@ public class MainActivity extends Activity {
         try (android.database.Cursor c = getContentResolver().query(uri,
                 new String[]{OpenableColumns.SIZE}, null, null, null)) {
             if (c != null && c.moveToFirst() && !c.isNull(0)) {
-                return c.getLong(0);
+                return Math.max(0, c.getLong(0));
             }
         } catch (Throwable ignored) {
         }

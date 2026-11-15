@@ -441,7 +441,7 @@ public final class StoreApi {
         try (android.database.Cursor c = r.query(uri,
                 new String[]{android.provider.OpenableColumns.SIZE}, null, null, null)) {
             if (c != null && c.moveToFirst() && !c.isNull(0)) {
-                return c.getLong(0);
+                return Math.max(0, c.getLong(0));
             }
         } catch (Throwable ignored) {
         }
