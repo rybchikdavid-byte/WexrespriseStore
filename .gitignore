@@ -13,4 +13,3 @@ captures/
 *.apk
 *.aab
 !demo/*.apk
-!WexrespriseStore.apk

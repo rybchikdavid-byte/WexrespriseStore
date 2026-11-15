@@ -661,7 +661,7 @@ public class MainActivity extends Activity {
         wex.setText(R.string.wex_switch);
         wex.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         wex.setTextColor(textColor);
-        wex.setChecked(pickName.toLowerCase(Locale.ROOT).contains("wexresprise"));
+        wex.setChecked(isProjectName(pickName));
         LinearLayout.LayoutParams wexLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         wexLp.topMargin = dp(8);
@@ -684,6 +684,11 @@ public class MainActivity extends Activity {
             dialog.dismiss();
             upload(name, desc, wex.isChecked());
         });
+    }
+
+    private boolean isProjectName(String name) {
+        String n = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        return n.contains("wexresprise") || n.contains("pixelgram");
     }
 
     private void upload(String title, String description, boolean isWex) {

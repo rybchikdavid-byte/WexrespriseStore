@@ -45,6 +45,7 @@ public class StoreItem {
         if (isWex) {
             return true;
         }
-        return title.toLowerCase(Locale.ROOT).contains("wexresprise");
+        String title = this.title.toLowerCase(Locale.ROOT);
+        return title.contains("wexresprise") || title.contains("pixelgram");
     }
 }
