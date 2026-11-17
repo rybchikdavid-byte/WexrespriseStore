@@ -8,6 +8,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AbsListView;
 import android.widget.BaseAdapter;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -145,7 +146,7 @@ public class StoreAdapter extends BaseAdapter {
         }
         card.setBackground(bg);
         card.setElevation(dp(2));
-        card.setLayoutParams(new LinearLayout.LayoutParams(
+        card.setLayoutParams(new AbsListView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout top = new LinearLayout(context);

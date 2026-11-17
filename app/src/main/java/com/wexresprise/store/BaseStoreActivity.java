@@ -1,6 +1,7 @@
 package com.wexresprise.store;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -17,6 +18,7 @@ import android.view.WindowInsetsController;
 import android.widget.TextView;
 
 import com.wexresprise.store.style.StyleConfig;
+import com.wexresprise.store.style.StyleManager;
 
 /**
  * Shared shell for the store screens: resolves the appearance, applies the light/dark platform
@@ -32,29 +34,119 @@ public abstract class BaseStoreActivity extends Activity {
     protected int subColor;
 
     private int appliedStyleVersion;
+    private boolean crashScreenShown;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        prefs = new Prefs(this);
+        try {
+            prefs = new Prefs(this);
+        } catch (Throwable t) {
+            prefs = null;
+            CrashLog.record(this, t);
+        }
         style = StoreTheme.resolve(this, prefs);
-        setTheme(style.night ? R.style.Theme_WexrespriseStore
-                : R.style.Theme_WexrespriseStore_Light);
+        try {
+            setTheme(style.night ? R.style.Theme_WexrespriseStore
+                    : R.style.Theme_WexrespriseStore_Light);
+        } catch (Throwable ignored) {
+        }
         super.onCreate(savedInstanceState);
         accent = style.accent;
         onAccent = style.onAccent;
         textColor = style.text;
         subColor = style.subtext;
-        appliedStyleVersion = prefs.styleVersion();
-        edgeToEdge();
-        updateSystemBars();
+        appliedStyleVersion = prefs == null ? 0 : prefs.styleVersion();
+        try {
+            edgeToEdge();
+        } catch (Throwable t) {
+            CrashLog.record(this, t);
+        }
+        try {
+            updateSystemBars();
+        } catch (Throwable t) {
+            CrashLog.record(this, t);
+        }
+    }
+
+    @Override
+    protected void onPostCreate(Bundle savedInstanceState) {
+        super.onPostCreate(savedInstanceState);
+        if (!crashScreenShown) {
+            showPreviousCrash();
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (prefs.styleVersion() != appliedStyleVersion) {
-            appliedStyleVersion = prefs.styleVersion();
-            recreate();
+        if (prefs == null) {
+            return;
+        }
+        try {
+            if (prefs.styleVersion() != appliedStyleVersion) {
+                appliedStyleVersion = prefs.styleVersion();
+                recreate();
+            }
+        } catch (Throwable t) {
+            CrashLog.record(this, t);
+        }
+    }
+
+    /**
+     * Replaces the screen with a plain crash report. Used when building the normal interface
+     * throws, so the reason stays readable on the phone instead of just closing the app.
+     */
+    protected void showCrashScreen(Throwable error) {
+        crashScreenShown = true;
+        String trace = CrashLog.traceOf(error);
+        try {
+            setContentView(CrashScreen.build(this, trace, new Runnable() {
+                @Override
+                public void run() {
+                    if (prefs != null) {
+                        prefs.resetAppearance();
+                    }
+                    try {
+                        StyleManager.get(BaseStoreActivity.this).select("");
+                    } catch (Throwable ignored) {
+                    }
+                    recreate();
+                }
+            }));
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void showPreviousCrash() {
+        String trace;
+        try {
+            trace = CrashLog.take(this);
+        } catch (Throwable t) {
+            return;
+        }
+        if (trace.trim().isEmpty()) {
+            return;
+        }
+        final String stored = trace;
+        try {
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.crash_previous)
+                    .setMessage(CrashLog.summary(stored) + "\n\n" + getString(R.string.crash_hint))
+                    .setPositiveButton(R.string.crash_details, (dialog, which) ->
+                            startActivity(CrashActivity.intent(this, stored)))
+                    .setNeutralButton(R.string.crash_reset, (dialog, which) -> {
+                        if (prefs != null) {
+                            prefs.resetAppearance();
+                        }
+                        try {
+                            StyleManager.get(this).select("");
+                        } catch (Throwable ignored) {
+                        }
+                        recreate();
+                    })
+                    .setNegativeButton(R.string.crash_close, null)
+                    .show();
+        } catch (Throwable ignored) {
         }
     }
 

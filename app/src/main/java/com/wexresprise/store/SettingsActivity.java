@@ -38,9 +38,14 @@ public class SettingsActivity extends BaseStoreActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        api = new StoreApi(this);
-        buildUi();
+        try {
+            super.onCreate(savedInstanceState);
+            api = new StoreApi(this);
+            buildUi();
+        } catch (Throwable t) {
+            CrashLog.record(this, t);
+            showCrashScreen(t);
+        }
     }
 
     private void buildUi() {

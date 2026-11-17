@@ -39,16 +39,78 @@ public final class StoreTheme {
     }
 
     public static StyleConfig resolve(Context context, Prefs prefs) {
-        boolean night = isNight(context, prefs);
+        StyleConfig s = fallback(context);
+        if (prefs == null) {
+            return s;
+        }
+        try {
+            boolean night = isNight(context, prefs);
+            s.night = night;
+
+            int accent = prefs.accent();
+            if (accent == 0) {
+                accent = systemAccent(context, night);
+            }
+            s.setAccent(accent);
+
+            if (night) {
+                s.background = 0xFF0B0D12;
+                s.surface = 0xFF141820;
+                s.text = 0xFFE7EAF0;
+                s.subtext = 0xFF9BA5B4;
+                s.outline = 0x33FFFFFF;
+                s.cardFill = 0x14FFFFFF;
+                s.cardStroke = 0x2EFFFFFF;
+            } else {
+                s.background = 0xFFF4F6FB;
+                s.surface = 0xFFFFFFFF;
+                s.text = 0xFF151A22;
+                s.subtext = 0xFF5B6472;
+                s.outline = 0x1F000000;
+                s.cardFill = 0xB8FFFFFF;
+                s.cardStroke = 0x24000000;
+            }
+
+            s.radius = clamp(prefs.radius(), 0, 28);
+            s.cardRadius = Math.min(34, s.radius + 6);
+            s.fontScale = clamp(prefs.fontScale(), 85, 125) / 100f;
+            s.backgroundMode = clamp(prefs.background(), 0, StyleConfig.BACKGROUND_SOLID);
+            s.cardStyle = clamp(prefs.cards(), 0, StyleConfig.CARDS_OUTLINE);
+            s.density = clamp(prefs.density(), 0, StyleConfig.DENSITY_COMPACT);
+            s.applyCardStyle();
+            s.iconTint = s.accent;
+            s.styleId = prefs.styleId();
+
+            try {
+                StyleManager.get(context).apply(s);
+            } catch (Throwable t) {
+                // A broken style must never make the store unusable.
+                CrashLog.record(context, t);
+            }
+        } catch (Throwable t) {
+            // A broken preference (for example a value saved with another type) must not
+            // stop the app from starting either.
+            CrashLog.record(context, t);
+            return fallback(context);
+        }
+        return s;
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    /** Built-in appearance used when the saved settings cannot be read at all. */
+    public static StyleConfig fallback(Context context) {
+        boolean night = true;
+        try {
+            night = (context.getResources().getConfiguration().uiMode
+                    & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        } catch (Throwable ignored) {
+        }
         StyleConfig s = new StyleConfig();
         s.night = night;
-
-        int accent = prefs.accent();
-        if (accent == 0) {
-            accent = systemAccent(context, night);
-        }
-        s.setAccent(accent);
-
+        s.setAccent(0xFFA8C7FA);
         if (night) {
             s.background = 0xFF0B0D12;
             s.surface = 0xFF141820;
@@ -66,22 +128,14 @@ public final class StoreTheme {
             s.cardFill = 0xB8FFFFFF;
             s.cardStroke = 0x24000000;
         }
-
-        s.radius = prefs.radius();
-        s.cardRadius = Math.min(34, prefs.radius() + 6);
-        s.fontScale = prefs.fontScale() / 100f;
-        s.backgroundMode = prefs.background();
-        s.cardStyle = prefs.cards();
-        s.density = prefs.density();
+        s.radius = 22;
+        s.cardRadius = 28;
+        s.fontScale = 1f;
+        s.backgroundMode = StyleConfig.BACKGROUND_AURORA;
+        s.cardStyle = StyleConfig.CARDS_GLASS;
+        s.density = StyleConfig.DENSITY_COMFORTABLE;
         s.applyCardStyle();
         s.iconTint = s.accent;
-        s.styleId = prefs.styleId();
-
-        try {
-            StyleManager.get(context).apply(s);
-        } catch (Throwable ignored) {
-            // A broken style must never make the store unusable.
-        }
         return s;
     }
 

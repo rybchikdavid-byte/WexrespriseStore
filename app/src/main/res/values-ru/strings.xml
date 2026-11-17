@@ -123,4 +123,13 @@
     <string name="install_permission_open">Открыть настройки</string>
     <string name="install_permission_needed">Разрешение не выдано, поэтому APK не установлен.</string>
     <string name="install_failed">Не удалось открыть установщик</string>
+    <string name="crash_title">Wexresprise Store остановился</string>
+    <string name="crash_hint">Это точный текст ошибки. Скопируй его и отправь разработчику — по нему видно, что сломалось.</string>
+    <string name="crash_copy">Скопировать</string>
+    <string name="crash_share">Отправить</string>
+    <string name="crash_reset">Сбросить оформление</string>
+    <string name="crash_close">Закрыть</string>
+    <string name="crash_details">Подробности</string>
+    <string name="crash_copied">Скопировано</string>
+    <string name="crash_previous">Прошлый запуск завершился ошибкой</string>
 </resources>

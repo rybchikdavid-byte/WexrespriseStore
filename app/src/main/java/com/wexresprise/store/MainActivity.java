@@ -82,14 +82,18 @@ public class MainActivity extends BaseStoreActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        api = new StoreApi(this);
-        buildUi();
-        updateTabs();
-        updateState();
-        refresh();
-        lastConfig = configSignature();
-        LauncherIcons.apply(this, prefs.icon());
+        try {
+            super.onCreate(savedInstanceState);
+            api = new StoreApi(this);
+            buildUi();
+            updateTabs();
+            updateState();
+            refresh();
+            lastConfig = configSignature();
+        } catch (Throwable t) {
+            CrashLog.record(this, t);
+            showCrashScreen(t);
+        }
     }
 
     private void buildUi() {
@@ -477,6 +481,9 @@ public class MainActivity extends BaseStoreActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (prefs == null || api == null) {
+            return;
+        }
         String now = configSignature();
         if (!now.equals(lastConfig)) {
             lastConfig = now;

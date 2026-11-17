@@ -123,4 +123,13 @@
     <string name="install_permission_open">Open settings</string>
     <string name="install_permission_needed">Permission was not granted, so the APK was not installed.</string>
     <string name="install_failed">Could not open the installer</string>
+    <string name="crash_title">Wexresprise Store stopped</string>
+    <string name="crash_hint">This is the exact error. Copy it and send it to the developer: it shows what broke.</string>
+    <string name="crash_copy">Copy</string>
+    <string name="crash_share">Share</string>
+    <string name="crash_reset">Reset appearance</string>
+    <string name="crash_close">Close</string>
+    <string name="crash_details">Details</string>
+    <string name="crash_copied">Copied</string>
+    <string name="crash_previous">The last launch ended with an error</string>
 </resources>

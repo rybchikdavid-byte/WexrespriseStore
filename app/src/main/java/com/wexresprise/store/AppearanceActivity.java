@@ -42,8 +42,13 @@ public class AppearanceActivity extends BaseStoreActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        buildUi();
+        try {
+            super.onCreate(savedInstanceState);
+            buildUi();
+        } catch (Throwable t) {
+            CrashLog.record(this, t);
+            showCrashScreen(t);
+        }
     }
 
     private void buildUi() {
