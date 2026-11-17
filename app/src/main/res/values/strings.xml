@@ -74,7 +74,7 @@
     <string name="appearance_hint">Colours, shape and file cards. Changes apply to every screen at once.</string>
     <string name="open_appearance">Open appearance</string>
     <string name="appearance_theme">Theme</string>
-    <string name="appearance_theme_hint">System follows the phone's light/dark switch.</string>
+    <string name="appearance_theme_hint">System follows the phone\'s light/dark switch.</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
