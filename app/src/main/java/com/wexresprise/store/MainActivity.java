@@ -1,7 +1,6 @@
 package com.wexresprise.store;
 
 import android.Manifest;
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.Context;
@@ -9,7 +8,6 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
@@ -24,7 +22,6 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Window;
 import android.view.WindowInsets;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -36,16 +33,19 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.wexresprise.store.style.StyleConfig;
+
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-public class MainActivity extends Activity {
+public class MainActivity extends BaseStoreActivity {
 
     private static final int REQ_PICK = 101;
     private static final int REQ_STORAGE = 102;
+    private static final int REQ_INSTALL_PERMISSION = 103;
 
-    private Prefs prefs;
     private StoreApi api;
     private final Handler main = new Handler(Looper.getMainLooper());
 
@@ -67,16 +67,13 @@ public class MainActivity extends Activity {
     private TextView stateAction;
     private LinearLayout publishButton;
 
-    private int accent;
-    private int onAccent;
-    private int textColor;
-    private int subColor;
     private int bottomInset;
     private int tab;
     private boolean loading;
     private String error;
     private List<StoreItem> items = new ArrayList<>();
     private StoreItem pendingDownload;
+    private File pendingInstall;
     private String lastConfig = "";
 
     private Uri pickUri;
@@ -86,77 +83,18 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        prefs = new Prefs(this);
         api = new StoreApi(this);
-        textColor = getColor(R.color.wx_text);
-        subColor = getColor(R.color.wx_sub);
-        accent = resolveAccent();
-        onAccent = Formats.contrast(accent);
-
-        edgeToEdge();
         buildUi();
         updateTabs();
         updateState();
         refresh();
         lastConfig = configSignature();
-    }
-
-    private int resolveAccent() {
-        if (Build.VERSION.SDK_INT >= 31) {
-            try {
-                int c = getColor(android.R.color.system_accent1_200);
-                if (Color.alpha(c) == 255) {
-                    return c;
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-        return getColor(R.color.wx_primary);
-    }
-
-    private void edgeToEdge() {
-        Window w = getWindow();
-        w.setStatusBarColor(Color.TRANSPARENT);
-        w.setNavigationBarColor(Color.TRANSPARENT);
-        if (Build.VERSION.SDK_INT >= 30) {
-            w.setDecorFitsSystemWindows(false);
-        } else {
-            w.getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-        }
-    }
-
-    private int dp(float value) {
-        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
-                getResources().getDisplayMetrics()));
-    }
-
-    private TextView label(CharSequence text, float sp, int color, boolean medium) {
-        TextView v = new TextView(this);
-        v.setText(text);
-        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-        v.setTextColor(color);
-        if (medium) {
-            v.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        }
-        return v;
-    }
-
-    private GlassDrawable glass(float radius, int fill, int stroke, boolean gloss) {
-        GlassDrawable d = new GlassDrawable(dp(radius), fill, stroke, Math.max(1f, getResources()
-                .getDisplayMetrics().density));
-        d.setGloss(gloss);
-        return d;
+        LauncherIcons.apply(this, prefs.icon());
     }
 
     private void buildUi() {
         root = new FrameLayout(this);
-
-        AuroraView aurora = new AuroraView(this);
-        aurora.setAccent(accent);
-        root.addView(aurora, new FrameLayout.LayoutParams(
+        root.addView(buildBackground(), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         content = new LinearLayout(this);
@@ -188,7 +126,7 @@ public class MainActivity extends Activity {
 
         list = new ListView(this);
         list.setDivider(new ColorDrawable(Color.TRANSPARENT));
-        list.setDividerHeight(dp(10));
+        list.setDividerHeight(dp(compact() ? 7 : 10));
         list.setSelector(new ColorDrawable(Color.TRANSPARENT));
         list.setVerticalScrollBarEnabled(false);
         list.setClipToPadding(false);
@@ -206,7 +144,7 @@ public class MainActivity extends Activity {
             public void onDetails(StoreItem item) {
                 showDetails(item);
             }
-        }, accent);
+        }, style);
         list.setAdapter(adapter);
 
         stateBox = buildState();
@@ -222,16 +160,8 @@ public class MainActivity extends Activity {
         root.addView(publishButton, fabLp);
 
         root.setOnApplyWindowInsetsListener((v, insets) -> {
-            int top;
-            int bottom;
-            if (Build.VERSION.SDK_INT >= 30) {
-                Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
-                top = bars.top;
-                bottom = bars.bottom;
-            } else {
-                top = insets.getSystemWindowInsetTop();
-                bottom = insets.getSystemWindowInsetBottom();
-            }
+            int top = screenTopInset(insets);
+            int bottom = screenBottomInset(insets);
             bottomInset = bottom;
             content.setPadding(dp(18), top + dp(14), dp(18), 0);
             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) publishButton.getLayoutParams();
@@ -250,11 +180,12 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.ic_store);
+        logo.setImageResource(R.drawable.ic_storefront);
+        logo.setColorFilter(style.iconTint);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        logo.setPadding(dp(9), dp(9), dp(9), dp(9));
+        logo.setPadding(dp(11), dp(11), dp(11), dp(11));
         logo.setBackground(glass(16, BadgeView.withAlpha(accent, 16),
-                BadgeView.withAlpha(accent, 38), true));
+                BadgeView.withAlpha(accent, 38), style.cardStyle == StyleConfig.CARDS_GLASS));
         row.addView(logo, new LinearLayout.LayoutParams(dp(46), dp(46)));
 
         LinearLayout titles = new LinearLayout(this);
@@ -274,9 +205,15 @@ public class MainActivity extends Activity {
         subtitleView.setEllipsize(TextUtils.TruncateAt.END);
         titles.addView(subtitleView);
 
+        ImageView palette = iconButton(R.drawable.ic_palette, R.string.appearance_title);
+        palette.setOnClickListener(v -> openAppearance());
+        row.addView(palette, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
         ImageView refresh = iconButton(R.drawable.ic_refresh, R.string.refresh);
         refresh.setOnClickListener(v -> refresh());
-        row.addView(refresh, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        LinearLayout.LayoutParams refreshLp = new LinearLayout.LayoutParams(dp(40), dp(40));
+        refreshLp.leftMargin = dp(6);
+        row.addView(refresh, refreshLp);
 
         ImageView settings = iconButton(R.drawable.ic_settings, R.string.settings_title);
         settings.setOnClickListener(v -> openSettings());
@@ -293,7 +230,8 @@ public class MainActivity extends Activity {
         v.setContentDescription(getString(description));
         v.setColorFilter(subColor);
         v.setPadding(dp(10), dp(10), dp(10), dp(10));
-        v.setBackground(glass(20, 0x14FFFFFF, 0x2AFFFFFF, false));
+        v.setBackground(glass(20, style.night ? 0x14FFFFFF : 0x0F000000,
+                style.night ? 0x2AFFFFFF : 0x1A000000, false));
         return v;
     }
 
@@ -327,7 +265,8 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.HORIZONTAL);
         box.setPadding(dp(4), dp(4), dp(4), dp(4));
-        box.setBackground(glass(23, 0x12FFFFFF, 0x26FFFFFF, true));
+        box.setBackground(glass(23, style.night ? 0x12FFFFFF : 0x0D000000,
+                style.night ? 0x26FFFFFF : 0x1A000000, true));
 
         tabAll = tabLabel(getString(R.string.tab_all));
         tabAll.setOnClickListener(v -> selectTab(0));
@@ -363,15 +302,13 @@ public class MainActivity extends Activity {
 
         stateProgress = new ProgressBar(this);
         stateProgress.setIndeterminateTintList(ColorStateList.valueOf(accent));
-        LinearLayout.LayoutParams progressLp = new LinearLayout.LayoutParams(
-                dp(30), dp(30));
-        box.addView(stateProgress, progressLp);
+        box.addView(stateProgress, new LinearLayout.LayoutParams(dp(30), dp(30)));
 
         stateIcon = new ImageView(this);
-        stateIcon.setImageResource(R.drawable.ic_store);
-        stateIcon.setAlpha(0.45f);
-        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(72), dp(72));
-        box.addView(stateIcon, iconLp);
+        stateIcon.setImageResource(R.drawable.ic_storefront);
+        stateIcon.setColorFilter(subColor);
+        stateIcon.setAlpha(0.55f);
+        box.addView(stateIcon, new LinearLayout.LayoutParams(dp(72), dp(72)));
 
         stateTitle = label("", 16, textColor, true);
         stateTitle.setGravity(Gravity.CENTER);
@@ -551,6 +488,10 @@ public class MainActivity extends Activity {
         startActivity(new Intent(this, SettingsActivity.class));
     }
 
+    private void openAppearance() {
+        startActivity(new Intent(this, AppearanceActivity.class));
+    }
+
     // ------------------------------------------------------------- publish
 
     private void startPublish() {
@@ -577,6 +518,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_INSTALL_PERMISSION) {
+            if (pendingInstall != null && ApkInstaller.canInstall(this)) {
+                File apk = pendingInstall;
+                pendingInstall = null;
+                ApkInstaller.install(this, apk);
+            } else if (pendingInstall != null) {
+                toast(getString(R.string.install_permission_needed));
+                pendingInstall = null;
+            }
+            return;
+        }
         if (requestCode != REQ_PICK || resultCode != RESULT_OK || data == null
                 || data.getData() == null) {
             return;
@@ -659,7 +611,7 @@ public class MainActivity extends Activity {
 
         CheckBox wex = new CheckBox(this);
         wex.setText(R.string.wex_switch);
-        wex.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        wex.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp(13));
         wex.setTextColor(textColor);
         wex.setChecked(isProjectName(pickName));
         LinearLayout.LayoutParams wexLp = new LinearLayout.LayoutParams(
@@ -705,7 +657,8 @@ public class MainActivity extends Activity {
         bar.setMax(100);
         bar.setProgress(0);
         bar.setProgressTintList(ColorStateList.valueOf(accent));
-        bar.setProgressBackgroundTintList(ColorStateList.valueOf(0x33FFFFFF));
+        bar.setProgressBackgroundTintList(ColorStateList.valueOf(
+                style.night ? 0x33FFFFFF : 0x22000000));
         LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(6));
         barLp.topMargin = dp(16);
@@ -761,6 +714,10 @@ public class MainActivity extends Activity {
             toast(getString(R.string.download_failed));
             return;
         }
+        if (isDirectApk(item)) {
+            downloadForInstall(item);
+            return;
+        }
         if (Build.VERSION.SDK_INT <= 28
                 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -770,6 +727,97 @@ public class MainActivity extends Activity {
             return;
         }
         enqueueDownload(item);
+    }
+
+    private boolean isDirectApk(StoreItem item) {
+        String ext = item.extension();
+        return ext.equals("apk")
+                || item.mime.equals("application/vnd.android.package-archive");
+    }
+
+    private void downloadForInstall(StoreItem item) {
+        File dir = new File(getCacheDir(), "apk-downloads");
+        String name = fileName(item);
+        File target = new File(dir, name);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(18), dp(22), dp(6));
+
+        TextView status = label(getString(R.string.downloading_apk), 14, textColor, true);
+        status.setSingleLine(true);
+        status.setEllipsize(TextUtils.TruncateAt.END);
+        box.addView(status);
+
+        ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        bar.setMax(100);
+        bar.setProgress(0);
+        bar.setProgressTintList(ColorStateList.valueOf(accent));
+        bar.setProgressBackgroundTintList(ColorStateList.valueOf(
+                style.night ? 0x33FFFFFF : 0x22000000));
+        LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(6));
+        barLp.topMargin = dp(16);
+        box.addView(bar, barLp);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(box)
+                .setCancelable(false)
+                .create();
+        dialog.show();
+
+        api.downloadApk(item, target, new StoreApi.DownloadCallback() {
+            @Override
+            public void onProgress(int percent) {
+                bar.setProgress(percent);
+            }
+
+            @Override
+            public void onSuccess(File file) {
+                if (isFinishing()) {
+                    return;
+                }
+                dialog.dismiss();
+                install(file);
+            }
+
+            @Override
+            public void onError(String message) {
+                if (isFinishing()) {
+                    return;
+                }
+                dialog.dismiss();
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle(R.string.download_failed)
+                        .setMessage(message)
+                        .setPositiveButton(R.string.close, null)
+                        .show();
+            }
+        });
+    }
+
+    private void install(File apk) {
+        if (!ApkInstaller.canInstall(this)) {
+            pendingInstall = apk;
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.install_permission_title)
+                    .setMessage(R.string.install_permission_text)
+                    .setPositiveButton(R.string.install_permission_open, (d, w) -> {
+                        if (!ApkInstaller.openPermissionSettings(this, REQ_INSTALL_PERMISSION)) {
+                            File file = pendingInstall;
+                            pendingInstall = null;
+                            if (file != null) {
+                                ApkInstaller.install(this, file);
+                            }
+                        }
+                    })
+                    .setNegativeButton(R.string.cancel, (d, w) -> pendingInstall = null)
+                    .show();
+            return;
+        }
+        if (!ApkInstaller.install(this, apk)) {
+            toast(getString(R.string.install_failed));
+        }
     }
 
     @Override
@@ -852,7 +900,8 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle(item.title)
                 .setMessage(body.toString())
-                .setPositiveButton(R.string.download, (d, w) -> download(item))
+                .setPositiveButton(isDirectApk(item) ? R.string.install_short : R.string.download,
+                        (d, w) -> download(item))
                 .setNegativeButton(R.string.close, null)
                 .show();
     }

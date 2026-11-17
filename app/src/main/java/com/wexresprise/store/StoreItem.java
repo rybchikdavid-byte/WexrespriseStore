@@ -13,9 +13,19 @@ public class StoreItem {
     public final String createdAt;
     public final long size;
     public final boolean isWex;
+    /** Optional path/URL of the app icon uploaded next to an APK. */
+    public final String iconPath;
+    public final String iconUrl;
 
     public StoreItem(String id, String title, String description, long size, String mime,
                      String storagePath, String downloadUrl, String createdAt, boolean isWex) {
+        this(id, title, description, size, mime, storagePath, downloadUrl, createdAt, isWex,
+                "", "");
+    }
+
+    public StoreItem(String id, String title, String description, long size, String mime,
+                     String storagePath, String downloadUrl, String createdAt, boolean isWex,
+                     String iconPath, String iconUrl) {
         this.id = id == null ? "" : id;
         this.title = title == null ? "" : title;
         this.description = description == null ? "" : description;
@@ -25,6 +35,17 @@ public class StoreItem {
         this.downloadUrl = downloadUrl == null ? "" : downloadUrl;
         this.createdAt = createdAt == null ? "" : createdAt;
         this.isWex = isWex;
+        this.iconPath = iconPath == null ? "" : iconPath;
+        this.iconUrl = iconUrl == null ? "" : iconUrl;
+    }
+
+    public boolean isApk() {
+        String ext = extension();
+        if (ext.isEmpty()) {
+            ext = Formats.extensionForMime(mime);
+        }
+        return ext.equals("apk") || ext.equals("xapk") || ext.equals("apks")
+                || mime.equals("application/vnd.android.package-archive");
     }
 
     public String extension() {

@@ -1,0 +1,8 @@
+{
+  "id": "com.wexresprise.sample.neon",
+  "name": "Neon Nights",
+  "version": "1.0",
+  "author": "Wexresprise",
+  "class": "com.wexresprise.sample.neon.NeonStyle",
+  "description": "Sample style: sharp neon cards on a solid dark background."
+}

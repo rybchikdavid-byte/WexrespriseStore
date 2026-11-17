@@ -1,14 +1,11 @@
 package com.wexresprise.store;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
-import android.graphics.Color;
-import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
@@ -18,7 +15,6 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Window;
 import android.view.WindowInsets;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -31,14 +27,9 @@ import android.widget.Toast;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 
-public class SettingsActivity extends Activity {
+public class SettingsActivity extends BaseStoreActivity {
 
-    private Prefs prefs;
     private StoreApi api;
-    private int accent;
-    private int onAccent;
-    private int textColor;
-    private int subColor;
 
     private EditText urlField;
     private EditText keyField;
@@ -48,73 +39,13 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        prefs = new Prefs(this);
         api = new StoreApi(this);
-        textColor = getColor(R.color.wx_text);
-        subColor = getColor(R.color.wx_sub);
-        accent = resolveAccent();
-        onAccent = Formats.contrast(accent);
-
-        edgeToEdge();
         buildUi();
-    }
-
-    private int resolveAccent() {
-        if (Build.VERSION.SDK_INT >= 31) {
-            try {
-                int c = getColor(android.R.color.system_accent1_200);
-                if (Color.alpha(c) == 255) {
-                    return c;
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-        return getColor(R.color.wx_primary);
-    }
-
-    private void edgeToEdge() {
-        Window w = getWindow();
-        w.setStatusBarColor(Color.TRANSPARENT);
-        w.setNavigationBarColor(Color.TRANSPARENT);
-        if (Build.VERSION.SDK_INT >= 30) {
-            w.setDecorFitsSystemWindows(false);
-        } else {
-            w.getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-        }
-    }
-
-    private int dp(float value) {
-        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
-                getResources().getDisplayMetrics()));
-    }
-
-    private TextView label(CharSequence text, float sp, int color, boolean medium) {
-        TextView v = new TextView(this);
-        v.setText(text);
-        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-        v.setTextColor(color);
-        if (medium) {
-            v.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        }
-        return v;
-    }
-
-    private GlassDrawable glass(float radius, int fill, int stroke, boolean gloss) {
-        GlassDrawable d = new GlassDrawable(dp(radius), fill, stroke, Math.max(1f,
-                getResources().getDisplayMetrics().density));
-        d.setGloss(gloss);
-        return d;
     }
 
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
-
-        AuroraView aurora = new AuroraView(this);
-        aurora.setAccent(accent);
-        root.addView(aurora, new FrameLayout.LayoutParams(
+        root.addView(buildBackground(), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         ScrollView scroll = new ScrollView(this);
@@ -130,6 +61,41 @@ public class SettingsActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         content.addView(buildHeader());
+
+        LinearLayout appearance = section(getString(R.string.appearance_title));
+        content.addView(appearance, cardLp());
+
+        TextView appearanceHint = label(getString(R.string.appearance_hint), 12.5f, subColor,
+                false);
+        appearanceHint.setLineSpacing(dp(3), 1f);
+        appearance.addView(appearanceHint);
+
+        LinearLayout swatches = new LinearLayout(this);
+        swatches.setOrientation(LinearLayout.HORIZONTAL);
+        swatches.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams swatchLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        swatchLp.topMargin = dp(12);
+        appearance.addView(swatches, swatchLp);
+
+        int[] preview = {
+                style.accent, 0xFF7BD88F, 0xFFE8B9FF, 0xFFFFD28C, 0xFFFFB4AB, 0xFF9BE7E0
+        };
+        for (int color : preview) {
+            View dot = new View(this);
+            dot.setBackground(glass(9, color, 0x33FFFFFF, false));
+            LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(18), dp(18));
+            dotLp.rightMargin = dp(7);
+            swatches.addView(dot, dotLp);
+        }
+
+        TextView appearanceButton = pill(getString(R.string.open_appearance), false);
+        appearanceButton.setOnClickListener(v -> startActivity(
+                new Intent(this, AppearanceActivity.class)));
+        LinearLayout.LayoutParams appearanceLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(44));
+        appearanceLp.topMargin = dp(12);
+        appearance.addView(appearanceButton, appearanceLp);
 
         LinearLayout server = section(getString(R.string.server));
         content.addView(server, cardLp());
@@ -149,7 +115,7 @@ public class SettingsActivity extends Activity {
                 | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         keyField.setText(prefs.key());
         keyField.setTypeface(Typeface.MONOSPACE);
-        keyField.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+        keyField.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp(11.5f));
         LinearLayout.LayoutParams keyLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         keyLp.topMargin = dp(8);
@@ -171,14 +137,11 @@ public class SettingsActivity extends Activity {
 
         TextView save = pill(getString(R.string.save), true);
         save.setOnClickListener(v -> save());
-        LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(
-                0, dp(44), 1f);
-        actions.addView(save, saveLp);
+        actions.addView(save, new LinearLayout.LayoutParams(0, dp(44), 1f));
 
         testButton = pill(getString(R.string.test), false);
         testButton.setOnClickListener(v -> test());
-        LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(
-                0, dp(44), 1f);
+        LinearLayout.LayoutParams testLp = new LinearLayout.LayoutParams(0, dp(44), 1f);
         testLp.leftMargin = dp(10);
         actions.addView(testButton, testLp);
 
@@ -227,24 +190,15 @@ public class SettingsActivity extends Activity {
 
         TextView version = label(getString(R.string.version_label, BuildConfig.VERSION_NAME),
                 11.5f, subColor, false);
+        version.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams versionLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         versionLp.topMargin = dp(16);
-        versionLp.gravity = Gravity.CENTER_HORIZONTAL;
-        version.setGravity(Gravity.CENTER);
         content.addView(version, versionLp);
 
         root.setOnApplyWindowInsetsListener((v, insets) -> {
-            int top;
-            int bottom;
-            if (Build.VERSION.SDK_INT >= 30) {
-                Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
-                top = bars.top;
-                bottom = bars.bottom;
-            } else {
-                top = insets.getSystemWindowInsetTop();
-                bottom = insets.getSystemWindowInsetBottom();
-            }
+            int top = screenTopInset(insets);
+            int bottom = screenBottomInset(insets);
             content.setPadding(dp(18), top + dp(12), dp(18), bottom + dp(28));
             return insets;
         });
@@ -262,7 +216,8 @@ public class SettingsActivity extends Activity {
         back.setColorFilter(textColor);
         back.setContentDescription(getString(R.string.close));
         back.setPadding(dp(10), dp(10), dp(10), dp(10));
-        back.setBackground(glass(20, 0x14FFFFFF, 0x2AFFFFFF, false));
+        back.setBackground(glass(20, style.night ? 0x14FFFFFF : 0x0F000000,
+                style.night ? 0x2AFFFFFF : 0x1A000000, false));
         back.setOnClickListener(v -> finish());
         row.addView(back, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
@@ -279,8 +234,10 @@ public class SettingsActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(16), dp(16), dp(14));
-        GlassDrawable bg = glass(22, 0x14FFFFFF, 0x2AFFFFFF, true);
-        bg.setGlossAlpha(0x2A);
+        GlassDrawable bg = cardBackground();
+        if (style.cardStyle == com.wexresprise.store.style.StyleConfig.CARDS_GLASS) {
+            bg.setGlossAlpha(style.night ? 0x2A : 0x60);
+        }
         card.setBackground(bg);
 
         TextView heading = label(title, 14, textColor, true);
@@ -301,9 +258,9 @@ public class SettingsActivity extends Activity {
     private EditText field(String hint, int inputType) {
         EditText e = new EditText(this);
         e.setHint(hint);
-        e.setHintTextColor(0x809BA5B4);
+        e.setHintTextColor(style.night ? 0x809BA5B4 : 0x805B6472);
         e.setTextColor(textColor);
-        e.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+        e.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp(13.5f));
         e.setSingleLine(true);
         e.setInputType(inputType);
         e.setBackgroundTintList(ColorStateList.valueOf(BadgeView.withAlpha(accent, 55)));
@@ -315,7 +272,7 @@ public class SettingsActivity extends Activity {
         TextView v = new TextView(this);
         v.setText(text);
         v.setGravity(Gravity.CENTER);
-        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp(13));
         v.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         if (primary) {
             v.setTextColor(onAccent);
@@ -423,9 +380,8 @@ public class SettingsActivity extends Activity {
 
     private void openSupabase() {
         try {
-            Intent intent = new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("https://supabase.com/dashboard/projects"));
-            startActivity(intent);
+            startActivity(new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://supabase.com/dashboard/projects")));
         } catch (Throwable ignored) {
             toast(getString(R.string.open_supabase));
         }

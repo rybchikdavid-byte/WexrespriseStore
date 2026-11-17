@@ -13,6 +13,8 @@ import org.json.JSONObject;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -52,8 +54,15 @@ public final class StoreApi {
         void onError(String message);
     }
 
-    private static final String SELECT =
-            "id,title,description,size_bytes,mime,storage_path,is_wex,created_at";
+    public interface DownloadCallback {
+        void onProgress(int percent);
+
+        void onSuccess(java.io.File file);
+
+        void onError(String message);
+    }
+
+    private static final String SELECT = "*";
 
     private final Context context;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -94,6 +103,7 @@ public final class StoreApi {
 
     /**
      * Uploads the picked file to the storage bucket and inserts a row into public.files.
+     * APKs also get their launcher icon extracted and uploaded to icons/ so the list can show it.
      */
     public void upload(Prefs prefs, Uri uri, String title, String description,
                        boolean isWex, UploadCallback cb) {
@@ -108,7 +118,23 @@ public final class StoreApi {
 
         pool.execute(() -> {
             boolean uploaded = false;
+            File iconFile = null;
+            String iconObject = null;
+            boolean iconUploaded = false;
             try {
+                if (isApk(mime, display)) {
+                    iconFile = ApkIconExtractor.extractAndSave(context, uri);
+                }
+                if (iconFile != null) {
+                    iconObject = "icons/" + System.currentTimeMillis() + "-icon.png";
+                    try (InputStream iconIn = new FileInputStream(iconFile)) {
+                        uploadObject(base, key, encodePath(iconObject), iconIn, iconFile.length(),
+                                "image/png", percent -> {
+                                });
+                    }
+                    iconUploaded = true;
+                }
+
                 InputStream in = resolver.openInputStream(uri);
                 if (in == null) {
                     throw new IOException(context.getString(R.string.no_file));
@@ -118,14 +144,106 @@ public final class StoreApi {
                     main.post(() -> cb.onProgress(p));
                 });
                 uploaded = true;
-                insertRow(base, key, title, description, size, mime, objectName, isWex);
+                try {
+                    insertRow(base, key, title, description, size, mime, objectName, isWex,
+                            iconObject);
+                } catch (IOException e) {
+                    // Older projects created before icon_path existed: keep publishing without it.
+                    if (iconObject != null && messageOf(e).contains("icon_path")) {
+                        insertRow(base, key, title, description, size, mime, objectName, isWex,
+                                null);
+                        removeObject(base, key, encodePath(iconObject));
+                        iconUploaded = false;
+                    } else {
+                        throw e;
+                    }
+                }
                 main.post(cb::onSuccess);
             } catch (Exception e) {
                 if (uploaded) {
                     removeObject(base, key, objectPath);
                 }
+                if (iconUploaded && iconObject != null) {
+                    removeObject(base, key, encodePath(iconObject));
+                }
                 final String msg = message(e);
                 main.post(() -> cb.onError(msg));
+            } finally {
+                if (iconFile != null) {
+                    //noinspection ResultOfMethodCallIgnored
+                    iconFile.delete();
+                }
+            }
+        });
+    }
+
+    /**
+     * Downloads an APK to the app cache, where the installer can read it through FileProvider.
+     */
+    public void downloadApk(StoreItem item, File target, DownloadCallback cb) {
+        final String url = item.downloadUrl;
+        pool.execute(() -> {
+            if (url == null || url.trim().isEmpty()) {
+                main.post(() -> cb.onError(context.getString(R.string.download_failed)));
+                return;
+            }
+            File part = new File(target.getAbsolutePath() + ".part");
+            HttpURLConnection c = null;
+            try {
+                File parent = target.getParentFile();
+                if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                    throw new IOException("cannot create the download directory");
+                }
+                //noinspection ResultOfMethodCallIgnored
+                part.delete();
+                c = (HttpURLConnection) new URL(url).openConnection();
+                c.setConnectTimeout(20000);
+                c.setReadTimeout(120000);
+                c.setInstanceFollowRedirects(true);
+                c.setRequestProperty("User-Agent", "WexrespriseStore");
+                int code = c.getResponseCode();
+                if (code < 200 || code >= 300) {
+                    String body = readAll(code >= 400 ? c.getErrorStream() : c.getInputStream());
+                    throw new IOException(errorFrom(code, body));
+                }
+                long total = c.getContentLengthLong();
+                long done = 0;
+                int last = -1;
+                try (InputStream in = new BufferedInputStream(c.getInputStream(), 64 * 1024);
+                     OutputStream out = new BufferedOutputStream(
+                             new java.io.FileOutputStream(part), 64 * 1024)) {
+                    byte[] buffer = new byte[64 * 1024];
+                    int read;
+                    while ((read = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, read);
+                        done += read;
+                        if (total > 0) {
+                            int percent = (int) Math.min(99, done * 100 / total);
+                            if (percent != last) {
+                                last = percent;
+                                final int p = percent;
+                                main.post(() -> cb.onProgress(p));
+                            }
+                        }
+                    }
+                    out.flush();
+                }
+                //noinspection ResultOfMethodCallIgnored
+                target.delete();
+                if (!part.renameTo(target)) {
+                    throw new IOException("cannot save the downloaded APK");
+                }
+                final File result = target;
+                main.post(() -> cb.onSuccess(result));
+            } catch (Exception e) {
+                //noinspection ResultOfMethodCallIgnored
+                part.delete();
+                final String msg = message(e);
+                main.post(() -> cb.onError(msg));
+            } finally {
+                if (c != null) {
+                    c.disconnect();
+                }
             }
         });
     }
@@ -147,6 +265,7 @@ public final class StoreApi {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.getJSONObject(i);
                 String path = o.optString("storage_path", "");
+                String iconPath = o.optString("icon_path", "");
                 items.add(new StoreItem(
                         o.optString("id", ""),
                         o.optString("title", ""),
@@ -156,7 +275,9 @@ public final class StoreApi {
                         path,
                         publicUrl(base, path),
                         o.optString("created_at", ""),
-                        o.optBoolean("is_wex", false)));
+                        o.optBoolean("is_wex", false),
+                        iconPath,
+                        publicUrl(base, iconPath)));
             }
             return items;
         } finally {
@@ -249,7 +370,8 @@ public final class StoreApi {
     }
 
     private void insertRow(String base, String key, String title, String description, long size,
-                           String mime, String objectName, boolean isWex) throws Exception {
+                           String mime, String objectName, boolean isWex, String iconPath)
+            throws Exception {
         JSONObject row = new JSONObject();
         row.put("title", title);
         row.put("description", description == null ? "" : description);
@@ -257,6 +379,9 @@ public final class StoreApi {
         row.put("mime", mime);
         row.put("storage_path", objectName);
         row.put("is_wex", isWex);
+        if (iconPath != null && !iconPath.isEmpty()) {
+            row.put("icon_path", iconPath);
+        }
 
         String url = trimSlash(base) + "/rest/v1/files";
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
@@ -400,6 +525,19 @@ public final class StoreApi {
             return context.getString(R.string.err_network);
         }
         return m;
+    }
+
+    private static String messageOf(Throwable t) {
+        String m = t == null ? "" : t.getMessage();
+        return m == null ? "" : m;
+    }
+
+    private static boolean isApk(String mime, String name) {
+        if (mime != null && mime.equals("application/vnd.android.package-archive")) {
+            return true;
+        }
+        String lower = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".apk") || lower.endsWith(".xapk") || lower.endsWith(".apks");
     }
 
     private static String mimeOf(ContentResolver r, Uri uri) {

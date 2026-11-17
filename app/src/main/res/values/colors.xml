@@ -7,4 +7,16 @@
     <color name="wx_text">#FFE7EAF0</color>
     <color name="wx_sub">#FF9BA5B4</color>
     <color name="wx_outline">#33FFFFFF</color>
+
+    <color name="wx_bg_light">#FFF4F6FB</color>
+    <color name="wx_surface_light">#FFFFFFFF</color>
+    <color name="wx_text_light">#FF151A22</color>
+    <color name="wx_sub_light">#FF5B6472</color>
+
+    <color name="wx_icon_green">#FF2E7D32</color>
+    <color name="wx_icon_blue">#FF1565C0</color>
+    <color name="wx_icon_violet">#FF6A3AB2</color>
+    <color name="wx_icon_orange">#FFE65100</color>
+    <color name="wx_icon_pink">#FFAD1457</color>
+    <color name="wx_icon_teal">#FF00695C</color>
 </resources>

@@ -2,21 +2,25 @@ package com.wexresprise.store;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import com.wexresprise.store.style.StyleConfig;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Glass file cards for the ListView. */
+/** Glass/solid/outline file cards for the ListView. */
 public class StoreAdapter extends BaseAdapter {
 
     public interface Listener {
@@ -28,18 +32,24 @@ public class StoreAdapter extends BaseAdapter {
     private final Context context;
     private final Listener listener;
     private final List<StoreItem> items = new ArrayList<>();
+    private final StyleConfig style;
     private final int primary;
     private final int textColor;
     private final int subColor;
     private final float density;
+    private final float fontScale;
+    private final boolean compact;
 
-    public StoreAdapter(Context c, Listener listener, int accent) {
+    public StoreAdapter(Context c, Listener listener, StyleConfig style) {
         this.context = c;
         this.listener = listener;
+        this.style = style;
         this.density = c.getResources().getDisplayMetrics().density;
-        this.primary = accent;
-        this.textColor = c.getColor(R.color.wx_text);
-        this.subColor = c.getColor(R.color.wx_sub);
+        this.primary = style.accent;
+        this.textColor = style.text;
+        this.subColor = style.subtext;
+        this.fontScale = style.fontScale;
+        this.compact = style.density == StyleConfig.DENSITY_COMPACT;
     }
 
     public void setItems(List<StoreItem> list) {
@@ -76,16 +86,15 @@ public class StoreAdapter extends BaseAdapter {
         }
         StoreItem item = getItem(position);
 
-        h.badge.setLabel(labelFor(item));
-        h.badge.setTint(tintFor(item));
         h.title.setText(item.title);
-
         if (TextUtils.isEmpty(item.description)) {
             h.description.setVisibility(View.GONE);
         } else {
             h.description.setVisibility(View.VISIBLE);
             h.description.setText(item.description);
         }
+
+        bindIcon(h, item);
 
         String size = Formats.size(item.size);
         String date = Formats.date(item.createdAt);
@@ -100,14 +109,40 @@ public class StoreAdapter extends BaseAdapter {
         return convertView;
     }
 
+    private void bindIcon(Holder h, StoreItem item) {
+        if (item.isApk()) {
+            h.badge.setVisibility(View.GONE);
+            h.icon.setVisibility(View.VISIBLE);
+            h.icon.setColorFilter(primary);
+            if (TextUtils.isEmpty(item.iconUrl)) {
+                h.icon.setTag(null);
+                h.icon.setImageResource(R.drawable.ic_app);
+            } else {
+                IconLoader.get(context).load(item.iconUrl, h.icon, R.drawable.ic_app);
+            }
+        } else {
+            h.icon.setTag(null);
+            h.icon.setVisibility(View.GONE);
+            h.badge.setVisibility(View.VISIBLE);
+            h.badge.setLabel(labelFor(item));
+            h.badge.setTint(tintFor(item));
+        }
+    }
+
     private View build() {
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(14), dp(14), dp(12));
-        int fill = 0x14FFFFFF;
-        int stroke = 0x2EFFFFFF;
-        GlassDrawable bg = new GlassDrawable(dp(22), fill, stroke, Math.max(1f, density));
-        bg.setGlossAlpha(0x30);
+        int pad = compact ? dp(11) : dp(14);
+        card.setPadding(pad, pad, pad, compact ? dp(9) : dp(12));
+
+        GlassDrawable bg = new GlassDrawable(dp(style.cardRadius), style.cardFill,
+                style.cardStroke, Math.max(1f, density));
+        if (style.cardStyle == StyleConfig.CARDS_GLASS) {
+            bg.setGloss(true);
+            bg.setGlossAlpha(style.night ? 0x30 : 0x70);
+        } else {
+            bg.setGloss(false);
+        }
         card.setBackground(bg);
         card.setElevation(dp(2));
         card.setLayoutParams(new LinearLayout.LayoutParams(
@@ -118,9 +153,25 @@ public class StoreAdapter extends BaseAdapter {
         card.addView(top, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        FrameLayout iconBox = new FrameLayout(context);
+        int box = compact ? dp(42) : dp(48);
+        top.addView(iconBox, new LinearLayout.LayoutParams(box, box));
+
+        ImageView icon = new ImageView(context);
+        icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        icon.setVisibility(View.GONE);
+        GradientDrawable plate = new GradientDrawable();
+        plate.setColor(style.night ? 0x12FFFFFF : 0x0D000000);
+        plate.setCornerRadius(dp(Math.min(style.radius, 16)));
+        icon.setBackground(plate);
+        icon.setClipToOutline(true);
+        icon.setPadding(dp(6), dp(6), dp(6), dp(6));
+        iconBox.addView(icon, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
         BadgeView badge = new BadgeView(context);
-        LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(dp(46), dp(46));
-        top.addView(badge, badgeLp);
+        iconBox.addView(badge, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         LinearLayout texts = new LinearLayout(context);
         texts.setOrientation(LinearLayout.VERTICAL);
@@ -130,7 +181,7 @@ public class StoreAdapter extends BaseAdapter {
         top.addView(texts, textsLp);
 
         TextView title = new TextView(context);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15 * fontScale);
         title.setTextColor(textColor);
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         title.setMaxLines(2);
@@ -139,13 +190,13 @@ public class StoreAdapter extends BaseAdapter {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView description = new TextView(context);
-        description.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        description.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f * fontScale);
         description.setTextColor(subColor);
-        description.setMaxLines(2);
+        description.setMaxLines(compact ? 1 : 2);
         description.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        descLp.topMargin = dp(3);
+        descLp.topMargin = dp(compact ? 1 : 3);
         texts.addView(description, descLp);
 
         LinearLayout bottom = new LinearLayout(context);
@@ -153,11 +204,11 @@ public class StoreAdapter extends BaseAdapter {
         bottom.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams bottomLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        bottomLp.topMargin = dp(11);
+        bottomLp.topMargin = dp(compact ? 7 : 11);
         card.addView(bottom, bottomLp);
 
         TextView meta = new TextView(context);
-        meta.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+        meta.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f * fontScale);
         meta.setTextColor(subColor);
         meta.setSingleLine(true);
         meta.setEllipsize(TextUtils.TruncateAt.END);
@@ -167,20 +218,21 @@ public class StoreAdapter extends BaseAdapter {
         LinearLayout download = new LinearLayout(context);
         download.setOrientation(LinearLayout.HORIZONTAL);
         download.setGravity(Gravity.CENTER);
-        download.setPadding(dp(12), dp(8), dp(14), dp(8));
-        GlassDrawable dl = new GlassDrawable(dp(18), BadgeView.withAlpha(primary, 16),
-                BadgeView.withAlpha(primary, 40), Math.max(1f, density));
+        download.setPadding(dp(12), dp(7), dp(14), dp(7));
+        GlassDrawable dl = new GlassDrawable(dp(Math.min(style.radius, 20)),
+                BadgeView.withAlpha(primary, 16), BadgeView.withAlpha(primary, 40),
+                Math.max(1f, density));
         dl.setGloss(false);
         download.setBackground(dl);
 
-        ImageView icon = new ImageView(context);
-        icon.setImageResource(R.drawable.ic_download);
-        icon.setColorFilter(primary);
-        download.addView(icon, new LinearLayout.LayoutParams(dp(15), dp(15)));
+        ImageView iconDownload = new ImageView(context);
+        iconDownload.setImageResource(R.drawable.ic_download);
+        iconDownload.setColorFilter(primary);
+        download.addView(iconDownload, new LinearLayout.LayoutParams(dp(15), dp(15)));
 
         TextView label = new TextView(context);
         label.setText(R.string.download);
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12 * fontScale);
         label.setTextColor(primary);
         label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(
@@ -192,6 +244,7 @@ public class StoreAdapter extends BaseAdapter {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         Holder h = new Holder();
+        h.icon = icon;
         h.badge = badge;
         h.title = title;
         h.description = description;
@@ -244,6 +297,7 @@ public class StoreAdapter extends BaseAdapter {
     }
 
     private static class Holder {
+        ImageView icon;
         BadgeView badge;
         TextView title;
         TextView description;

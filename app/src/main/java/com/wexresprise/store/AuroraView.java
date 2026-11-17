@@ -26,6 +26,7 @@ public class AuroraView extends View {
     private float phase;
     private boolean running;
     private int accent = 0xFFA8C7FA;
+    private boolean night = true;
 
     private final Runnable ticker = new Runnable() {
         @Override
@@ -52,6 +53,12 @@ public class AuroraView extends View {
         invalidate();
     }
 
+    public void setNight(boolean night) {
+        this.night = night;
+        rebuild();
+        invalidate();
+    }
+
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
@@ -65,19 +72,21 @@ public class AuroraView extends View {
             return;
         }
         base.setShader(new LinearGradient(0, 0, w * 0.4f, h,
-                0xFF0B0D12, 0xFF101420, Shader.TileMode.CLAMP));
+                night ? 0xFF0B0D12 : 0xFFF7F9FE,
+                night ? 0xFF101420 : 0xFFE8EEF9, Shader.TileMode.CLAMP));
 
-        int blue = 0xFF4E7BFF;
-        int violet = 0xFF9A6BFF;
+        int blue = night ? 0xFF4E7BFF : 0xFF7EA6FF;
+        int violet = night ? 0xFF9A6BFF : 0xFFC9A7FF;
         glowA.setShader(new RadialGradient(0, 0, h * 0.55f,
-                new int[]{withAlpha(blend(blue, accent, 0.35f), 60), 0x00000000},
+                new int[]{withAlpha(blend(blue, accent, 0.35f), night ? 60 : 34), 0x00000000},
                 new float[]{0f, 1f}, Shader.TileMode.CLAMP));
         glowB.setShader(new RadialGradient(0, 0, h * 0.5f,
-                new int[]{withAlpha(violet, 48), 0x00000000},
+                new int[]{withAlpha(violet, night ? 48 : 26), 0x00000000},
                 new float[]{0f, 1f}, Shader.TileMode.CLAMP));
 
         veil.setShader(new LinearGradient(0, 0, 0, h,
-                0x660B0D12, 0xCC0B0D12, Shader.TileMode.CLAMP));
+                night ? 0x660B0D12 : 0x33FFFFFF,
+                night ? 0xCC0B0D12 : 0x99FFFFFF, Shader.TileMode.CLAMP));
     }
 
     @Override
